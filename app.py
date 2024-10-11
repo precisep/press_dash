@@ -90,7 +90,10 @@ app.layout = html.Div(
         ),
     ]
 )
-
+def convert_to_pressure(raw_value):
+    """Convert raw pressure values to human-readable format."""
+    scaling_factor = 1e6  
+    return raw_value / scaling_factor if pd.notnull(raw_value) else 0.0
 
 def parse_sqlite(contents):
     """Parse the SQLite file and return a DataFrame."""
@@ -103,10 +106,11 @@ def parse_sqlite(contents):
 
         conn = sqlite3.connect('uploaded_db_cycle.sqlite')
         df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData", conn)
-        df['Val1'] = df['Val1'] / 1e6
-        df['Val2'] = df['Val2'] / 1e6
-        df['Val3'] = df['Val3'] / 1e6
         conn.close()
+        df['Val1'] = df['Val1'].apply(convert_to_pressure)
+        df['Val2'] = df['Val2'].apply(convert_to_pressure)
+        df['Val3'] = df['Val3'].apply(convert_to_pressure)
+        
         return df
     except sqlite3.DatabaseError as e:
         return f"Error: {str(e)}"
