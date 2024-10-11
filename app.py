@@ -1,8 +1,7 @@
 import sqlite3
 import pandas as pd
-from datetime import datetime,time
+from datetime import datetime, time
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from dash import Dash, dcc, html, Input, Output, callback, State
 import base64
 import io
@@ -15,13 +14,13 @@ app = Dash(__name__)
 
 server = app.server
 app.layout = html.Div(
-    className='app-container',  
+    className='app-container',
     children=[
-        html.H1("Aluecor Press & Aging Oven Dashboard", className='app-heading'), 
-        
+        html.H1("Aluecor Press & Aging Oven Dashboard", className='app-heading'),
+
         dcc.Loading(
             id="loading-spinner-upload",
-            type="circle",  
+            type="circle",  # You can change to 'square' or 'dot' as well
             children=[
                 dcc.Upload(
                     id='upload-data-cycle',
@@ -74,14 +73,21 @@ app.layout = html.Div(
 
         dcc.Loading(
             id="loading-spinner-generate",
-            type="circle",
+            type="circle",  
             children=[
                 html.Button('Generate Figure', id='generate-figure-btn', n_clicks=0),
+                html.Div(id='loading-status') 
             ],
             fullscreen=False  
         ),
 
-        html.Div(id='output-graph'),
+        dcc.Loading(  
+            id='loading-graphs',
+            type='circle',  
+            children=[
+                html.Div(id='output-graph'),
+            ]
+        ),
     ]
 )
 
@@ -97,6 +103,9 @@ def parse_sqlite(contents):
 
         conn = sqlite3.connect('uploaded_db_cycle.sqlite')
         df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData", conn)
+        df['Val1'] = df['Val1'] / 1e6
+        df['Val2'] = df['Val2'] / 1e6
+        df['Val3'] = df['Val3'] / 1e6
         conn.close()
         return df
     except sqlite3.DatabaseError as e:
@@ -197,10 +206,10 @@ def update_output(n_clicks, contents_cycle, contents_thermocouple, start_date, e
 
         figures = process_and_plot_data(df_cycle, df_thermocouple, pd.to_datetime(start_date), pd.to_datetime(end_date))
         
-        
         graph_components = [dcc.Graph(figure=fig) for fig in figures]
         return graph_components  
 
     return html.Div([html.P("Upload both files, select date range, and press 'Generate Figure'.")])
+
 if __name__ == '__main__':
     app.run_server(debug=True)
