@@ -15,49 +15,55 @@ app = Dash(__name__)
 
 server = app.server
 app.layout = html.Div(
-    
-    style={'width': '100%','display': 'flex', 'flexDirection': 'column', 'alignItems': 'center', 'justifyContent': 'center', 'minHeight': '100vh'},
+    className='app-container',  
     children=[
-        html.H1("Aluecor Press & Aging Oven Dashboard"),
-        dcc.Upload(
-            id='upload-data-cycle',
-            children=html.Div(['Drag and Drop or ', html.A('Select Cycle Data SQLite File')]),
-            style={
-                'width': '100%',
-                'height': '60px',
-                'lineHeight': '60px',
-                'borderWidth': '1px',
-                'borderStyle': 'dashed',
-                'borderRadius': '5px',
-                'textAlign': 'center',
-                'margin': '10px',
-                'display': 'flex',
-                'justifyContent': 'center',
-                'alignItems': 'center',
-            }
-        ),
-        html.Div(id='cycle-upload-status'),
+        html.H1("Aluecor Press & Aging Oven Dashboard", className='app-heading'), 
         
-        dcc.Upload(
-            id='upload-data-thermocouple',
-            children=html.Div(['Drag and Drop or ', html.A('Select Thermocouple Data SQLite File')]),
-            style={
-                'width': '100%',
-                'height': '60px',
-                'lineHeight': '60px',
-                'borderWidth': '1px',
-                'borderStyle': 'dashed',
-                'borderRadius': '5px',
-                'textAlign': 'center',
-                'margin': '10px',
-                'display': 'flex',
-                'justifyContent': 'center',
-                'alignItems': 'center',
-            }
-        ),
-        html.Div(id='thermocouple-upload-status'),
+        dcc.Loading(
+            id="loading-spinner-upload",
+            type="circle",  
+            children=[
+                dcc.Upload(
+                    id='upload-data-cycle',
+                    children=html.Div(['Drag and Drop or ', html.A('Select Cycle Data SQLite File')]),
+                    style={
+                        'width': '100%',
+                        'height': '60px',
+                        'lineHeight': '60px',
+                        'borderWidth': '1px',
+                        'borderStyle': 'dashed',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'margin': '10px',
+                        'display': 'flex',
+                        'justifyContent': 'center',
+                        'alignItems': 'center',
+                    }
+                ),
+                html.Div(id='cycle-upload-status'),
 
-        
+                dcc.Upload(
+                    id='upload-data-thermocouple',
+                    children=html.Div(['Drag and Drop or ', html.A('Select Thermocouple Data SQLite File')]),
+                    style={
+                        'width': '100%',
+                        'height': '60px',
+                        'lineHeight': '60px',
+                        'borderWidth': '1px',
+                        'borderStyle': 'dashed',
+                        'borderRadius': '5px',
+                        'textAlign': 'center',
+                        'margin': '10px',
+                        'display': 'flex',
+                        'justifyContent': 'center',
+                        'alignItems': 'center',
+                    }
+                ),
+                html.Div(id='thermocouple-upload-status'),
+            ],
+            fullscreen=False  
+        ),
+
         dcc.DatePickerRange(
             id='date-picker-range',
             start_date=datetime(2024, 10, 7),
@@ -66,10 +72,19 @@ app.layout = html.Div(
             style={'margin': '20px'}
         ),
 
-        html.Button('Generate Figure', id='generate-figure-btn', n_clicks=0),
+        dcc.Loading(
+            id="loading-spinner-generate",
+            type="circle",
+            children=[
+                html.Button('Generate Figure', id='generate-figure-btn', n_clicks=0),
+            ],
+            fullscreen=False  
+        ),
+
         html.Div(id='output-graph'),
     ]
 )
+
 
 def parse_sqlite(contents):
     """Parse the SQLite file and return a DataFrame."""
