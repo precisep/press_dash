@@ -13,6 +13,7 @@ pio.templates.default = "plotly_dark"
 
 app = Dash(__name__)
 
+server = app.server
 app.layout = html.Div(
     
     style={'width': '100%','display': 'flex', 'flexDirection': 'column', 'alignItems': 'center', 'justifyContent': 'center', 'minHeight': '100vh'},
