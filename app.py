@@ -105,7 +105,7 @@ def parse_sqlite(contents):
             f.write(decoded)
 
         conn = sqlite3.connect('uploaded_db_cycle.sqlite')
-        df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData WHERE TS DIV (1500) ORDER BY TS;", conn)
+        df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData", conn)
         conn.close()
         df['Val1'] = df['Val1'].apply(convert_to_pressure)
         df['Val2'] = df['Val2'].apply(convert_to_pressure)
