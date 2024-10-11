@@ -1,5 +1,8 @@
-body{
+body {
     margin: 0;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background-color: #181818;
+    color: #E0E0E0;
 }
 .app-container {
     width: 100%;
