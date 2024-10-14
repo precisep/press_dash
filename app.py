@@ -203,7 +203,7 @@ def process_and_plot_data(df_cycle, df_thermocouple, start_date, end_date):
 
     fig4 = go.Figure()
     for col in ['Val1', 'Val2', 'Val3', 'Val4', 'Val5', 'Val6']:
-        fig4.add_trace(go.Scatter(x=filtered_thermocouple['Timestamp'], y=filtered_thermocouple[col], mode='lines', name=f'Thermocouple {col}'))
+        fig4.add_trace(go.Scatter(x=filtered_thermocouple['Timestamp'], y=filtered_thermocouple[col], mode='lines', name=f'Thermocouple {col[-1]}'))
     fig4.update_layout(title='Thermocouple Temperatures', xaxis_title='Timestamp', yaxis_title='Temperature (°C)', legend_title='Thermocouples')
 
     for fig in [fig1, fig2, fig3, fig4]:
