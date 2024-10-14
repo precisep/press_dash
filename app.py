@@ -20,7 +20,7 @@ app.layout = html.Div(
 
         dcc.Loading(
             id="loading-spinner-upload",
-            type="circle",  # You can change to 'square' or 'dot' as well
+            type="circle", 
             children=[
                 dcc.Upload(
                     id='upload-data-cycle',
@@ -95,7 +95,7 @@ def convert_to_pressure(raw_value):
     scaling_factor = 1e6  
     return raw_value / scaling_factor if pd.notnull(raw_value) else 0.0
 
-def parse_sqlite(contents):
+def parse_sqlite(contents,start_date,end_date):
     """Parse the SQLite file and return a DataFrame."""
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
@@ -105,8 +105,26 @@ def parse_sqlite(contents):
             f.write(decoded)
 
         conn = sqlite3.connect('uploaded_db_cycle.sqlite')
-        df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData", conn)
+        query = f"""
+            SELECT 
+                strftime('%Y-%m-%d %H:%M', datetime(TS / 1000000, 'unixepoch', 'UTC')) AS TS,
+                AVG(Val1) AS Val1,
+                AVG(Val2) AS Val2,
+                AVG(Val3) AS Val3
+            FROM 
+                TblTrendData
+            WHERE 
+                datetime(TS / 1000000, 'unixepoch', 'UTC') BETWEEN '2024-07-24 06:00:00' AND '2024-07-25 18:00:00'
+            GROUP BY 
+                CAST(strftime('%s', datetime(TS / 1000000, 'unixepoch', 'UTC')) / (15 * 60) AS INTEGER)
+            ORDER BY 
+                TS;
+        """
+        #print(query)
+        #df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData", conn)
+        df = pd.read_sql_query(query, conn)
         conn.close()
+        print(df.head())
         df['Val1'] = df['Val1'].apply(convert_to_pressure)
         df['Val2'] = df['Val2'].apply(convert_to_pressure)
         df['Val3'] = df['Val3'].apply(convert_to_pressure)
@@ -143,7 +161,7 @@ def convert_micro_to_datetime(ts):
 def process_and_plot_data(df_cycle, df_thermocouple, start_date, end_date):
     """Process the cycle data and thermocouple data and return separate Plotly figures."""
 
-    df_cycle['Timestamp'] = df_cycle['TS'].apply(convert_micro_to_datetime)
+    df_cycle['Timestamp'] = df_cycle['TS']
     df_thermocouple['Timestamp'] = df_thermocouple['TS'].apply(convert_micro_to_datetime)
 
  
@@ -202,7 +220,7 @@ def show_upload_status(contents_cycle, contents_thermocouple):
 )
 def update_output(n_clicks, contents_cycle, contents_thermocouple, start_date, end_date):
     if n_clicks > 0 and contents_cycle and contents_thermocouple:
-        df_cycle = parse_sqlite(contents_cycle)
+        df_cycle = parse_sqlite(contents_cycle,start_date,end_date)
         df_thermocouple = parse_thermocouple(contents_thermocouple)
 
         if isinstance(df_cycle, str) or isinstance(df_thermocouple, str):
