@@ -246,4 +246,4 @@ def update_output(n_clicks, contents_cycle, contents_thermocouple, start_date, e
     return html.Div([html.P("Upload both files, select date range, and press 'Generate Figure'.")])
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
