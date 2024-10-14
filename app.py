@@ -114,17 +114,14 @@ def parse_sqlite(contents,start_date,end_date):
             FROM 
                 TblTrendData
             WHERE 
-                datetime(TS / 1000000, 'unixepoch', 'UTC') BETWEEN '2024-07-24 06:00:00' AND '2024-07-25 18:00:00'
+                datetime(TS / 1000000, 'unixepoch', 'UTC') BETWEEN '{start_date} 06:00:00' AND '{end_date} 18:00:00'
             GROUP BY 
                 CAST(strftime('%s', datetime(TS / 1000000, 'unixepoch', 'UTC')) / (15 * 60) AS INTEGER)
             ORDER BY 
                 TS;
         """
-        #print(query)
-        #df = pd.read_sql_query("SELECT TS, Val1, Val2, Val3 FROM TblTrendData", conn)
         df = pd.read_sql_query(query, conn)
         conn.close()
-        print(df.head())
         df['Val1'] = df['Val1'].apply(convert_to_pressure)
         df['Val2'] = df['Val2'].apply(convert_to_pressure)
         df['Val3'] = df['Val3'].apply(convert_to_pressure)
@@ -133,7 +130,7 @@ def parse_sqlite(contents,start_date,end_date):
     except sqlite3.DatabaseError as e:
         return f"Error: {str(e)}"
 
-def parse_thermocouple(contents):
+def parse_thermocouple(contents,start_date,end_date):
     """Parse the thermocouple SQLite file and return a DataFrame."""
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
@@ -143,15 +140,30 @@ def parse_thermocouple(contents):
             temp_db.write(decoded)
 
         conn = sqlite3.connect('uploaded_db_thermocouple.sqlite')
-        query = "SELECT TS, Val1, Val2, Val3, Val4, Val5, Val6 FROM TblTrendData"
+        query = f"""
+            SELECT 
+                strftime('%Y-%m-%d %H:%M', datetime(TS / 1000000, 'unixepoch', 'UTC')) AS TS,
+                AVG(Val1) AS Val1,
+                AVG(Val2) AS Val2,
+                AVG(Val3) AS Val3,
+                AVG(Val4) AS Val4,
+                AVG(Val5) AS Val5,
+                AVG(Val6) AS Val6
+            FROM 
+                TblTrendData
+            WHERE 
+                datetime(TS / 1000000, 'unixepoch', 'UTC') BETWEEN '{start_date} 06:00:00' AND '{end_date} 18:00:00'
+            GROUP BY 
+                CAST(strftime('%s', datetime(TS / 1000000, 'unixepoch', 'UTC')) / (15 * 60) AS INTEGER)
+            ORDER BY 
+                TS;
+        """
         df_thermocouple = pd.read_sql_query(query, conn)
         conn.close()
         return df_thermocouple
 
     except sqlite3.DatabaseError as e:
         return f"Error: {str(e)}"
-
-
 
 
 def convert_micro_to_datetime(ts):
@@ -162,7 +174,7 @@ def process_and_plot_data(df_cycle, df_thermocouple, start_date, end_date):
     """Process the cycle data and thermocouple data and return separate Plotly figures."""
 
     df_cycle['Timestamp'] = df_cycle['TS']
-    df_thermocouple['Timestamp'] = df_thermocouple['TS'].apply(convert_micro_to_datetime)
+    df_thermocouple['Timestamp'] = df_thermocouple['TS']
 
  
     df_cycle['Timestamp'] = pd.to_datetime(df_cycle['Timestamp'])
@@ -221,7 +233,7 @@ def show_upload_status(contents_cycle, contents_thermocouple):
 def update_output(n_clicks, contents_cycle, contents_thermocouple, start_date, end_date):
     if n_clicks > 0 and contents_cycle and contents_thermocouple:
         df_cycle = parse_sqlite(contents_cycle,start_date,end_date)
-        df_thermocouple = parse_thermocouple(contents_thermocouple)
+        df_thermocouple = parse_thermocouple(contents_thermocouple,start_date,end_date)
 
         if isinstance(df_cycle, str) or isinstance(df_thermocouple, str):
             return html.Div([html.P("Error in one of the uploaded files.")])
