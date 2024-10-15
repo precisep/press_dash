@@ -8,7 +8,7 @@ import plotly.io as pio
 pio.templates.default = "plotly_dark"
 
 app = Dash(__name__)
-
+server = app.server
 app.layout = html.Div(
     className='app-container',
     children=[
