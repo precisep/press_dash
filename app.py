@@ -60,16 +60,16 @@ def parse_sqlite(db_path, selected_date):
         conn = sqlite3.connect(db_path)
         query = f"""
         SELECT 
-            strftime('%Y-%m-%d %H:%M', datetime(TS / 1000000, 'unixepoch', 'UTC', '+1 hours')) AS TS,
+            strftime('%Y-%m-%d %H:%M', datetime(TS / 1000000, 'unixepoch', 'UTC', '+2 hours')) AS TS,
             Val1 AS Val1,
             Val2 AS Val2,
             Val3 AS Val3
         FROM 
             TblTrendData
         WHERE 
-            datetime(TS / 1000000, 'unixepoch', 'UTC', '+1 hours') BETWEEN '{start_date}' AND '{end_date}'
+            datetime(TS / 1000000, 'unixepoch', 'UTC', '+2 hours') BETWEEN '{start_date}' AND '{end_date}'
         GROUP BY 
-            CAST(strftime('%s', datetime(TS / 1000000, 'unixepoch', 'UTC', '+1 hours')) / (1 * 60) AS INTEGER)
+            CAST(strftime('%s', datetime(TS / 1000000, 'unixepoch', 'UTC', '+2 hours')) / (1 * 60) AS INTEGER)
         ORDER BY 
             TS;"""
 
