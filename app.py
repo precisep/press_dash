@@ -53,8 +53,8 @@ def convert_to_pressure(raw_value):
 
 def parse_sqlite(db_path, selected_date):
     """Parse the SQLite file and return a DataFrame."""
-    start_date = f"{selected_date} 06:00:00"
-    end_date = f"{selected_date} 18:00:00"
+    start_date = f"{selected_date} 07:00:00"
+    end_date = f"{selected_date} 17:00:00"
     
     try:
         conn = sqlite3.connect(db_path)
@@ -134,8 +134,8 @@ def process_and_plot_data(df_cycle):
         line=dict(shape='linear')
     ))
 
-    date_min = df_cycle['Timestamp'].min().replace(hour=6, minute=0, second=0)
-    date_max = df_cycle['Timestamp'].max().replace(hour=18, minute=0, second=0)
+    date_min = df_cycle['Timestamp'].min().replace(hour=7, minute=0, second=0)
+    date_max = df_cycle['Timestamp'].max().replace(hour=17, minute=0, second=0)
 
     line_fig.update_layout(
         title='Extrusion Time',
@@ -177,6 +177,18 @@ def process_and_plot_data(df_cycle):
         showlegend=True,
         legend=dict(title='Summary of Hours', itemsizing='constant')
     )
+    bar_fig.add_annotation(
+    text="Total timeframe: 07:00 to 17:00",
+    xref="paper", yref="paper",
+    x=0.5, y=1.17,
+    showarrow=False,
+    font=dict(size=12),
+    bordercolor='black',
+    borderwidth=1,
+    borderpad=4,
+    )
+
+
 
     bar_fig.for_each_trace(lambda t: t.update(name=f"{t.name}: {format_time(t.y[0])}"))
 
