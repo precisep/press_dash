@@ -116,7 +116,7 @@ def process_and_plot_data(df_cycle):
 
     total_hours = 10 
 
-    operational_time = ((df_cycle['Val1'] > 0.50).sum() / 60)  
+    operational_time = ((df_cycle['Val1'] > 1000).sum() / 60)  
     downtime = total_hours - operational_time
 
     operational_time = min(operational_time, total_hours)
@@ -209,7 +209,7 @@ def update_output(n_clicks, selected_date):
 
         df_cycle = parse_sqlite(cycle_db_path, selected_date)
         #csv_file_path = f'csv_data/cycle-data-created-{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.csv'
-        #df_cycle.to_csv(csv_file_path, index=False)
+        df_cycle.to_csv(csv_file_path, index=False)
         
         if isinstance(df_cycle, str): 
             return html.Div([html.P(df_cycle)])
