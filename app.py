@@ -115,7 +115,7 @@ def parse_frappe_api(selected_date):
         return "No data found for the selected date range."
     
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    #df['timestamp'] = pd.to_datetime(df['timestamp'] + timedelta(hours=2))
+    df['timestamp'] = pd.to_datetime(df['timestamp'] + timedelta(hours=2))
     df['extrusion_time'] = df['extrusion_time'].apply(convert_to_pressure)
 
    
