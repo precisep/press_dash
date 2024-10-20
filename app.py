@@ -222,9 +222,7 @@ def process_and_plot_data(df_cycle):
 )
 def update_output(n_clicks, selected_date):
     if n_clicks > 0:
-        df_cycle = parse_frappe_api(selected_date)
-        print(df_cycle)
-
+        df_cycle = parse_frappe_api(selected_date)    
         if isinstance(df_cycle, str): 
             return html.Div([html.P(df_cycle)])
 
