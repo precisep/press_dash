@@ -90,7 +90,7 @@ def fetch_page(page, start_date, end_date, page_size):
 def parse_frappe_api(selected_date):
     """Query Frappe API and return a DataFrame based on the selected date with pagination."""
     
-    start_date = f"{selected_date} 06:00:00"
+    start_date = f"{selected_date} 07:00:00"
     end_date = f"{selected_date} 17:00:00"
     
     data = []  
