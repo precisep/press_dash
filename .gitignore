@@ -5,3 +5,5 @@ data/Application.E19_Page_1_Trend2_15_10_2024.1.sqlite
 path_to_your_database.db
 csv_data/
 js/
+data/frappe_data.py
+data/pro.py
