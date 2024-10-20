@@ -1,14 +1,31 @@
+import os
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State
 import plotly.io as pio
+from dotenv import load_dotenv
+import requests
+from concurrent.futures import ThreadPoolExecutor  
 
 pio.templates.default = "plotly_dark"
 
 app = Dash(__name__)
 server = app.server
+
+load_dotenv()
+
+api_url = os.getenv('API_URL')
+authorization_token = os.getenv('AUTHORIZATION_TOKEN')
+
+session = requests.Session()
+
+headers = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Authorization': f'token {authorization_token}'
+}
 
 app.layout = html.Div(
     className='app-container',
@@ -51,43 +68,63 @@ def convert_to_pressure(raw_value):
     scaling_factor = 1e6
     return raw_value / scaling_factor if pd.notnull(raw_value) else 0.0
 
-def parse_sqlite(db_path, selected_date):
-    """Parse the SQLite file and return a DataFrame."""
-    start_date = f"{selected_date} 07:00:00"
+
+def fetch_page(page, start_date, end_date, page_size):
+    """Fetch a single page of data from the API."""
+    try:
+        filter_query = (f'?fields=["timestamp","extrusion_time"]'
+                        f'&filters=[["timestamp",">=","{start_date}"],'
+                        f'["timestamp","<=","{end_date}"]]'
+                        f'&limit={page_size}&offset={page * page_size}')
+        
+        response = requests.get(f'{api_url}{filter_query}', headers=headers)
+        response.raise_for_status()
+        
+        return response.json().get('data', [])
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching page {page}: {str(e)}")
+        return []
+
+
+def parse_frappe_api(selected_date):
+    """Query Frappe API and return a DataFrame based on the selected date with pagination."""
+    
+    start_date = f"{selected_date} 06:00:00"
     end_date = f"{selected_date} 17:00:00"
     
-    try:
-        conn = sqlite3.connect(db_path)
-        query = f"""
-        SELECT 
-            strftime('%Y-%m-%d %H:%M', datetime(TS / 1000000, 'unixepoch', 'UTC', '+2 hours')) AS TS,
-            Val1 AS Val1,
-            Val2 AS Val2,
-            Val3 AS Val3
-        FROM 
-            TblTrendData
-        WHERE 
-            datetime(TS / 1000000, 'unixepoch', 'UTC', '+2 hours') BETWEEN '{start_date}' AND '{end_date}'
-        GROUP BY 
-            CAST(strftime('%s', datetime(TS / 1000000, 'unixepoch', 'UTC', '+2 hours')) / (1 * 60) AS INTEGER)
-        ORDER BY 
-            TS;"""
+    data = []  
+    page = 0  
+    page_size =  2000
 
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        df['Val1'] = df['Val1'].apply(convert_to_pressure)
-        df['Val2'] = df['Val2'].apply(convert_to_pressure)
-        df['Val3'] = df['Val3'].apply(convert_to_pressure)
+    initial_data = fetch_page(page, start_date, end_date, page_size)
+    data.extend(initial_data)
+    
+      
+   
+    with ThreadPoolExecutor() as executor:
+        results = list(executor.map(lambda p: fetch_page(p, start_date, end_date, page_size), range(page)))
 
-        return df
-    except sqlite3.DatabaseError as e:
-        return f"Database error occurred: {str(e)}"
+    for page_data in results:
+        data.extend(page_data)
 
-def format_time(total_hours):
-    """Format total hours into H:H (hours:minutes) format."""
-    hours = int(total_hours)
-    minutes = int((total_hours - hours) * 60)
-    return f"{hours}:{minutes:02d}"
+
+    df = pd.DataFrame(data)
+
+    if df.empty:
+        return "No data found for the selected date range."
+    
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    #df['timestamp'] = pd.to_datetime(df['timestamp'] + timedelta(hours=2))
+    df['extrusion_time'] = df['extrusion_time'].apply(convert_to_pressure)
+
+   
+    df = df.sort_values(by='timestamp')
+
+    return df
+
+def convert_to_extrusion_time(value):
+    return float(value) if value else None
 
 def format_time(hours):
     """Format hours in H:MM format."""
@@ -96,27 +133,13 @@ def format_time(hours):
     formatted_minutes = total_minutes % 60
     return f"{formatted_hours}:{formatted_minutes:02d}"  
 
-def format_time(hours):
-    """Format hours in H:MM format."""
-    total_minutes = int(hours * 60)
-    formatted_hours = total_minutes // 60
-    formatted_minutes = total_minutes % 60
-    return f"{formatted_hours}:{formatted_minutes:02d}"
-
-def format_time(hours):
-    """Format hours in H:MM format."""
-    total_minutes = int(hours * 60)
-    formatted_hours = total_minutes // 60
-    formatted_minutes = total_minutes % 60
-    return f"{formatted_hours}:{formatted_minutes:02d}"
-
 def process_and_plot_data(df_cycle):
-    """Process the cycle data and return a Plotly figure for Val1 (line graph) and a bar chart for operational and downtime."""
-    df_cycle['Timestamp'] = pd.to_datetime(df_cycle['TS'])
+    """Process the cycle data and return a Plotly figure for extrusion time (line graph) and a bar chart for operational and downtime."""
+    df_cycle['Timestamp'] = pd.to_datetime(df_cycle['timestamp'])
 
     total_hours = 10 
 
-    operational_time = ((df_cycle['Val1'] > 1000).sum() / 60)  
+    operational_time = ((df_cycle['extrusion_time'] > 1000).sum() / 60)  
     downtime = total_hours - operational_time
 
     operational_time = min(operational_time, total_hours)
@@ -128,9 +151,9 @@ def process_and_plot_data(df_cycle):
     line_fig = go.Figure()
     line_fig.add_trace(go.Scatter(
         x=df_cycle['Timestamp'], 
-        y=df_cycle['Val1'], 
+        y=df_cycle['extrusion_time'], 
         mode='lines', 
-        name='Val1 - Operational Time',
+        name='Extrusion Time - Operational Time',
         line=dict(shape='linear')
     ))
 
@@ -178,25 +201,19 @@ def process_and_plot_data(df_cycle):
         legend=dict(title='Summary of Hours', itemsizing='constant')
     )
     bar_fig.add_annotation(
-    text="Total timeframe: 07:00 to 17:00",
-    xref="paper", yref="paper",
-    x=0.5, y=1.17,
-    showarrow=False,
-    font=dict(size=12),
-    bordercolor='black',
-    borderwidth=1,
-    borderpad=4,
+        text="Total timeframe: 07:00 to 17:00",
+        xref="paper", yref="paper",
+        x=0.5, y=1.17,
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor='black',
+        borderwidth=1,
+        borderpad=4,
     )
-
-
 
     bar_fig.for_each_trace(lambda t: t.update(name=f"{t.name}: {format_time(t.y[0])}"))
 
     return line_fig, bar_fig
-
-
-
-
 
 @app.callback(
     Output('output-graph', 'children'),
@@ -205,17 +222,17 @@ def process_and_plot_data(df_cycle):
 )
 def update_output(n_clicks, selected_date):
     if n_clicks > 0:
-        cycle_db_path = 'data/Application.E19_Page_1_Trend2.1.sqlite'
+        df_cycle = parse_frappe_api(selected_date)
+        print(df_cycle)
 
-        df_cycle = parse_sqlite(cycle_db_path, selected_date)      
         if isinstance(df_cycle, str): 
             return html.Div([html.P(df_cycle)])
 
-        line_fig, pie_fig = process_and_plot_data(df_cycle)
+        line_fig, bar_fig = process_and_plot_data(df_cycle)
 
         return [
             dcc.Graph(figure=line_fig),
-            dcc.Graph(figure=pie_fig)
+            dcc.Graph(figure=bar_fig)  
         ]
 
     return html.Div([html.P("Select a date and press 'Generate Figure'.")])
