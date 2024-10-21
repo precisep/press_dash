@@ -90,12 +90,12 @@ def fetch_page(page, start_date, end_date, page_size):
 def parse_frappe_api(selected_date):
     """Query Frappe API and return a DataFrame based on the selected date with pagination."""
     
-    start_date = f"{selected_date} 07:00:00"
-    end_date = f"{selected_date} 17:00:00"
+    start_date = f"{selected_date} 04:59:59"
+    end_date = f"{selected_date} 16:59:59"
     
     data = []  
     page = 0  
-    page_size =  2000
+    page_size = 100000
 
     initial_data = fetch_page(page, start_date, end_date, page_size)
     data.extend(initial_data)
@@ -107,10 +107,11 @@ def parse_frappe_api(selected_date):
 
     for page_data in results:
         data.extend(page_data)
+        
 
 
     df = pd.DataFrame(data)
-
+    print(f'Records for selected date {df.shape}')
     if df.empty:
         return "No data found for the selected date range."
     
