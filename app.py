@@ -90,12 +90,12 @@ def fetch_page(page, start_date, end_date, page_size):
 def parse_frappe_api(selected_date):
     """Query Frappe API and return a DataFrame based on the selected date with pagination."""
     
-    start_date = f"{selected_date} 04:59:59"
+    start_date = f"{selected_date} 06:00:00"
     end_date = f"{selected_date} 16:59:59"
     
     data = []  
     page = 0  
-    page_size = 100000
+    page_size = 200000
 
     initial_data = fetch_page(page, start_date, end_date, page_size)
     data.extend(initial_data)
@@ -139,14 +139,16 @@ def process_and_plot_data(df_cycle):
     df_cycle['Timestamp'] = pd.to_datetime(df_cycle['timestamp'])
 
     total_hours = 10 
+    operational_time = ((df_cycle['extrusion_time'] > 1000).sum() * (1 / 60) )/60
+    
+    
+    downtime = total_hours - (operational_time)
 
-    operational_time = ((df_cycle['extrusion_time'] > 1000).sum() / 60)  
-    downtime = total_hours - operational_time
+    print(f'Operational time {operational_time}')
+    print(f'Downtime {downtime}')
 
-    operational_time = min(operational_time, total_hours)
-    downtime = max(downtime, 0)
 
-    formatted_operational_time = format_time(operational_time)
+    formatted_downtime = format_time(operational_time)
     formatted_downtime = format_time(downtime)
 
     line_fig = go.Figure()
