@@ -1,15 +1,13 @@
 import os
 import sqlite3
 import pandas as pd
-import dash
-from dash import Dash, dcc, html, Input, Output, State
-from concurrent.futures import ThreadPoolExecutor  
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
+import plotly.graph_objects as go
+from dash import Dash, dcc, html, Input, Output, State
 import plotly.io as pio
+from dotenv import load_dotenv
 import requests
-import time
+from concurrent.futures import ThreadPoolExecutor  
 
 pio.templates.default = "plotly_dark"
 
@@ -29,7 +27,7 @@ headers = {
 app.layout = html.Div(
     className='app-container',
     children=[
-        html.H1("Aluecor Alarms Dashboard", className='app-heading'),
+        html.H1("Aluecor Press Dashboard", className='app-heading'),
 
         dcc.DatePickerSingle(
             id='date-picker',
@@ -61,11 +59,13 @@ app.layout = html.Div(
     ]
 )
 
+
 def fetch_page(page, start_date, end_date, page_size):
+   
     try:
-        filter_query = (f'?fields=["tslast","tsactive","alarm","time_difference_minutes"]'
-                        f'&filters=[["tsactive",">=","{start_date}"],'
-                        f'["tsactive","<=","{end_date}"]]'
+        filter_query = (f'?fields=["timestamp","extrusion_time"]'
+                        f'&filters=[["timestamp",">=","{start_date}"],'
+                        f'["timestamp","<=","{end_date}"]]'
                         f'&limit={page_size}&offset={page * page_size}')
         
         response = requests.get(f'{api_url}{filter_query}', headers=headers)
@@ -76,6 +76,7 @@ def fetch_page(page, start_date, end_date, page_size):
     except requests.exceptions.RequestException as e:
         print(f"Error fetching page {page}: {str(e)}")
         return []
+
 
 def parse_frappe_api(selected_date):
     start_date = f"{selected_date} 04:00:00"
@@ -88,138 +89,152 @@ def parse_frappe_api(selected_date):
     initial_data = fetch_page(page, start_date, end_date, page_size)
     data.extend(initial_data)
     
+      
+   
     with ThreadPoolExecutor() as executor:
-        results = list(executor.map(lambda p: fetch_page(p, start_date, end_date, page_size), range(page + 1)))
+        results = list(executor.map(lambda p: fetch_page(p, start_date, end_date, page_size), range(page)))
 
     for page_data in results:
         data.extend(page_data)
+        
+
 
     df = pd.DataFrame(data)
-    df['tsactive'] = pd.to_datetime(df['tsactive'])  # Ensure tsactive is in datetime format
     print(f'Records for selected date {df.shape}')
     if df.empty:
         return "No data found for the selected date range."
     
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'] + timedelta(hours=2))
+    df['extrusion_time'] = df['extrusion_time'].apply(cycle_times)
+
+   
+    df = df.sort_values(by='timestamp')
+
     return df
 
-def create_figure(selected_date, df):
-    start_date = f"{selected_date} 07:00:00"
-    end_date = f"{selected_date} 17:00:00"
+def convert_to_extrusion_time(value):
+    return float(value) if value else None
+
+def format_time(hours):
+  
+    total_minutes = int(hours * 60)
+    formatted_hours = total_minutes // 60
+    formatted_minutes = total_minutes % 60
+    return f"{formatted_hours}:{formatted_minutes:02d}"  
+
+def cycle_times(raw_value):
+    seconds_scaling_factor = 1e9
+    if pd.notnull(raw_value):
+        return (raw_value / seconds_scaling_factor)
+    return 0
+
+def format_time(hours):
+    """Format hours into a more readable string."""
+    total_seconds = int(hours * 3600)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours}h {minutes}m {seconds}s"
+
+def process_and_plot_data(df_cycle):
+    df_cycle['Timestamp'] = pd.to_datetime(df_cycle['timestamp'])
     
-    start_date_filter = pd.to_datetime(start_date)
-    end_date_filter = pd.to_datetime(end_date)
+    total_hours = 10
 
-    mask = (df['tsactive'] >= start_date_filter) & (df['tsactive'] < end_date_filter)
-    filtered_df = df[mask]
+    operational_time = ((df_cycle['extrusion_time'] >= 1).sum() * (1 / 60) ) / 60  
+    downtime = total_hours - operational_time
 
-    filtered_df['Equipment Group'] = filtered_df['alarm'].apply(lambda alarm: map_to_equipment_group(alarm, equipment_grouping)).dropna()
+    print(f'Operational time: {format_time(operational_time)}')
+    print(f'Downtime: {format_time(downtime)}')
 
-    alarm_downtime_totals = filtered_df.groupby(['Equipment Group'])['time_difference_minutes'].sum().reset_index()
-    alarm_downtime_totals = alarm_downtime_totals.sort_values('time_difference_minutes', ascending=False)
-    filtered_df['Equipment Group'] = pd.Categorical(filtered_df['Equipment Group'], categories=alarm_downtime_totals['Equipment Group'], ordered=True)
-    filtered_df = filtered_df.sort_values('Equipment Group', ascending=False)
-    filtered_df['tslast'] = pd.to_datetime(filtered_df['tslast'])
-    time_range = pd.date_range(start=start_date, end=end_date, freq='h')
 
-    alarm_group = filtered_df['Equipment Group'].unique()
-    fig = go.Figure()
-    bar_width = 0.25
+    line_fig = go.Figure()
+    line_fig.add_trace(go.Scatter(
+        x=df_cycle['Timestamp'], 
+        y=df_cycle['extrusion_time'], 
+        mode='lines', 
+        name='Extrusion Time - Operational Time',
+        line=dict(shape='linear')
+    ))
 
-    for equipment_group in alarm_group:
-        alarm_data = filtered_df[filtered_df['Equipment Group'] == equipment_group]
-        last_time = pd.Timestamp(start_date)
+    date_min = df_cycle['Timestamp'].min().replace(hour=7, minute=0, second=0)
+    date_max = df_cycle['Timestamp'].max().replace(hour=17, minute=0, second=0)
 
-        for hour in time_range:
-            active_alarms = alarm_data[(alarm_data['tslast'] >= last_time) & (alarm_data['tslast'] < hour)]
-            downtime_total = active_alarms['time_difference_minutes'].sum()
-            alarms_list = active_alarms['alarm'].unique()
-
-            if downtime_total > 0:
-                if (hour - last_time).total_seconds() / 60 > 0:
-                    active_time = (hour - last_time).total_seconds() / 60 - downtime_total
-                    start_time = active_alarms['tsactive'].iloc[0] if not active_alarms.empty else last_time
-                    
-                    start_time_in_minutes = (start_time - pd.Timestamp(start_time.date())).total_seconds() / 60
-                    
-                    alarms_hover = "<br>".join(alarms_list)
-
-                    fig.add_trace(go.Bar(
-                        y=[equipment_group],
-                        x=[active_time],
-                        width=bar_width,
-                        orientation='h',
-                        name='Good State',
-                        marker_color='lightgreen',
-                        base=last_time.hour * 60 + last_time.minute,
-                        hovertemplate=f'Start Time: {start_time.strftime("%Y-%m-%d %H:%M")} <br>Equipment: {equipment_group} Type: Good State<br>Duration: {minutes_to_hhmm(round(active_time, 2))}<extra></extra>',
-                        showlegend=False
-                    ))
-
-                    alarm_start_time_in_minutes = last_time.hour * 60 + last_time.minute + active_time
-                    alarm_start_time = last_time + pd.to_timedelta(active_time, unit='m')  
-                 
-                    fig.add_trace(go.Bar(
-                        y=[equipment_group],
-                        x=[downtime_total],
-                        width=bar_width,
-                        orientation='h',
-                        name='Active Alarm',
-                        marker_color='red',
-                        base=last_time.hour * 60 + last_time.minute + active_time,
-                        hovertemplate=f'Start Time: {alarm_start_time.strftime("%Y-%m-%d %H:%M")} <br>Equipment: {equipment_group} <br>Alarms: {alarms_hover}<br>Type: Active Alarm<br>Duration: {minutes_to_hhmm(round(downtime_total, 2))}<extra></extra>',
-                        showlegend=False
-                    ))
-                last_time = hour
-
-        if last_time < time_range[-1]:
-            active_alarms = alarm_data[(alarm_data['tslast'] >= last_time) & (alarm_data['tslast'] <= time_range[-1])]
-            downtime_total = active_alarms['time_difference_minutes'].sum()
-            alarms_list = active_alarms['alarm'].unique()
-            if downtime_total > 0:
-                fig.add_trace(go.Bar(
-                    y=[equipment_group],
-                    x=[downtime_total],
-                    width=bar_width,
-                    orientation='h',
-                    name='Active Alarm',
-                    marker_color='red',
-                    base=last_time.hour * 60 + last_time.minute,
-                    hovertemplate=f'Start Time: {last_time.strftime("%Y-%m-%d %H:%M")} <br>Equipment: {equipment_group} <br>Alarms: {alarms_hover}<br>Type: Active Alarm<br>Duration: {minutes_to_hhmm(round(downtime_total, 2))}<extra></extra>',
-                    showlegend=False
-                ))
-
-    fig.update_layout(
-        barmode='stack',
-        title=f"Downtime for {selected_date}",
-        xaxis_title="Time (minutes)",
-        yaxis_title="Equipment Group",
-        yaxis=dict(title_standoff=10),
-        height=600,
-        xaxis=dict(range=[0, 60 * 24]),
-        margin=dict(l=40, r=40, t=40, b=40),
-        legend_title_text="Alarm Status"
+    line_fig.update_layout(
+        title='Extrusion Time',
+        xaxis_title='Timestamp',
+        yaxis_title='Cycle Reading',
+        legend_title='Cycle Data',
+        xaxis_tickformat='%Y-%m-%d %H:%M',
+        xaxis=dict(
+            range=[date_min, date_max],  
+            tickmode='linear',  
+            dtick=3600000 * 0.25, 
+            tickangle=90 
+        ),
+        height=450,
+        width=850
     )
 
-    return fig
+    bar_fig = go.Figure()
+    bar_fig.add_trace(go.Bar(
+        x=['Operational Time'],
+        y=[operational_time],
+        name='Operational Time',
+        marker_color='green'
+    ))
+
+    bar_fig.add_trace(go.Bar(
+        x=['Downtime'],
+        y=[downtime],
+        name='Downtime',
+        marker_color='red'
+    ))
+
+    bar_fig.update_layout(
+        title='Operational and Downtime Overview',
+        xaxis_title='Status',
+        yaxis_title='Hours',
+        height=450,
+        width=450,
+        showlegend=True,
+        legend=dict(title='Summary of Hours', itemsizing='constant')
+    )
+    bar_fig.add_annotation(
+        text="Total timeframe: 07:00 to 17:00",
+        xref="paper", yref="paper",
+        x=0.5, y=1.17,
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor='black',
+        borderwidth=1,
+        borderpad=4,
+    )
+
+    bar_fig.for_each_trace(lambda t: t.update(name=f"{t.name}: {format_time(t.y[0])}"))
+
+    return line_fig, bar_fig
 
 @app.callback(
     Output('output-graph', 'children'),
-    Output('loading-status', 'children'),
     Input('generate-figure-btn', 'n_clicks'),
     State('date-picker', 'date')
 )
-def update_graph(n_clicks, selected_date):
+def update_output(n_clicks, selected_date):
     if n_clicks > 0:
-        loading_message = "Loading..."
-        df = parse_frappe_api(selected_date)
-        
-        if isinstance(df, str):
-            return html.Div(df), loading_message  # Return error message
-        
-        fig = create_figure(selected_date, df)
-        
-        return dcc.Graph(figure=fig), "Figure generated."
-    return dash.no_update
+        df_cycle = parse_frappe_api(selected_date)
+        df_cycle = df_cycle.drop_duplicates()  
+        if isinstance(df_cycle, str): 
+            return html.Div([html.P(df_cycle)])
+
+        line_fig, bar_fig = process_and_plot_data(df_cycle)
+
+        return [
+            dcc.Graph(figure=line_fig),
+            dcc.Graph(figure=bar_fig)  
+        ]
+
+    return html.Div([html.P("Select a date and press 'Generate Figure'.")])
 
 if __name__ == '__main__':
     app.run_server(debug=True)
