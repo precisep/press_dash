@@ -7,3 +7,4 @@ csv_data/
 js/
 data/frappe_data.py
 data/pro.py
+.env
