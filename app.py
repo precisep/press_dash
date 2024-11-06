@@ -63,7 +63,7 @@ app.layout = html.Div(
 def fetch_page(page, start_date, end_date, page_size):
    
     try:
-        filter_query = (f'?fields=["timestamp","extrusion_time"]'
+        filter_query = (f'?fields=["timestamp","extrusion_time","downtime_reasons"]'
                         f'&filters=[["timestamp",">=","{start_date}"],'
                         f'["timestamp","<=","{end_date}"]]'
                         f'&limit={page_size}&offset={page * page_size}')
@@ -138,7 +138,7 @@ def format_time(hours):
 
 def process_and_plot_data(df_cycle):
     df_cycle['Timestamp'] = pd.to_datetime(df_cycle['timestamp'])
-    
+    df_cycle['downtime_reasons'] = df_cycle['downtime_reasons']   
     total_hours = 10
 
     operational_time = ((df_cycle['extrusion_time'] >= 1).sum() * (1 / 60) ) / 60  
@@ -161,7 +161,9 @@ def process_and_plot_data(df_cycle):
         y=df_cycle['extrusion_time'], 
         mode='lines', 
         name='Extrusion Time - Operational Time',
-        line=dict(shape='linear')
+        line=dict(shape='linear'),
+        hovertext=df_cycle['downtime_reasons'],
+        hoverinfo='text+x+y'
     ))
 
     date_min = df_cycle['Timestamp'].min().replace(hour=7, minute=0, second=0)
@@ -230,7 +232,9 @@ def process_and_plot_data(df_cycle):
 def update_output(n_clicks, selected_date):
     if n_clicks > 0:
         df_cycle = parse_frappe_api(selected_date)
-        df_cycle = df_cycle.drop_duplicates()  
+        df_cycle = df_cycle.drop_duplicates()
+        print(df_cycle.head())  
+        print(f'Unique Reseasons:{df_cycle[df_cycle["downtime_reasons"].notna()]}')
         if isinstance(df_cycle, str): 
             return html.Div([html.P(df_cycle)])
 
