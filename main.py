@@ -13,9 +13,12 @@ pio.templates.default = "plotly_dark"
 
 app = Dash(__name__)
 server = app.server
+
 load_dotenv()
+
 api_url = os.getenv('API_URL')
 authorization_token = os.getenv('AUTHORIZATION_TOKEN')
+
 session = requests.Session()
 
 headers = {
@@ -60,8 +63,14 @@ app.layout = html.Div(
 )
 
 
+def convert_to_pressure(raw_value):
+    """Convert raw pressure values to human-readable format."""
+    scaling_factor = 1e6
+    return raw_value / scaling_factor if pd.notnull(raw_value) else 0.0
+
+
 def fetch_page(page, start_date, end_date, page_size):
-   
+    """Fetch a single page of data from the API."""
     try:
         filter_query = (f'?fields=["timestamp","extrusion_time"]'
                         f'&filters=[["timestamp",">=","{start_date}"],'
@@ -79,12 +88,14 @@ def fetch_page(page, start_date, end_date, page_size):
 
 
 def parse_frappe_api(selected_date):
-    start_date = f"{selected_date} 04:00:00"
+    """Query Frappe API and return a DataFrame based on the selected date with pagination."""
+    
+    start_date = f"{selected_date} 06:00:00"
     end_date = f"{selected_date} 17:00:00"
     
     data = []  
     page = 0  
-    page_size = 200000
+    page_size =  2000
 
     initial_data = fetch_page(page, start_date, end_date, page_size)
     data.extend(initial_data)
@@ -96,17 +107,16 @@ def parse_frappe_api(selected_date):
 
     for page_data in results:
         data.extend(page_data)
-        
 
 
     df = pd.DataFrame(data)
-    print(f'Records for selected date {df.shape}')
+
     if df.empty:
         return "No data found for the selected date range."
     
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'] + timedelta(hours=2))
-    df['extrusion_time'] = df['extrusion_time'].apply(cycle_times)
+    #df['timestamp'] = pd.to_datetime(df['timestamp'] + timedelta(hours=2))
+    df['extrusion_time'] = df['extrusion_time'].apply(convert_to_pressure)
 
    
     df = df.sort_values(by='timestamp')
@@ -117,43 +127,26 @@ def convert_to_extrusion_time(value):
     return float(value) if value else None
 
 def format_time(hours):
-  
+    """Format hours in H:MM format."""
     total_minutes = int(hours * 60)
     formatted_hours = total_minutes // 60
     formatted_minutes = total_minutes % 60
     return f"{formatted_hours}:{formatted_minutes:02d}"  
 
-def cycle_times(raw_value):
-    seconds_scaling_factor = 1e9
-    if pd.notnull(raw_value):
-        return (raw_value / seconds_scaling_factor)
-    return 0
-
-def format_time(hours):
-    """Format hours into a more readable string."""
-    total_seconds = int(hours * 3600)
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"{hours}h {minutes}m {seconds}s"
-
 def process_and_plot_data(df_cycle):
+    """Process the cycle data and return a Plotly figure for extrusion time (line graph) and a bar chart for operational and downtime."""
     df_cycle['Timestamp'] = pd.to_datetime(df_cycle['timestamp'])
-    
-    total_hours = 10
 
-    operational_time = ((df_cycle['extrusion_time'] >= 1).sum() * (1 / 60) ) / 60  
+    total_hours = 10 
+
+    operational_time = ((df_cycle['extrusion_time'] > 1000).sum() / 60)  
     downtime = total_hours - operational_time
 
-    avg_cycle_time_minutes = 3  
-    avg_cycle_time_seconds = avg_cycle_time_minutes * 60  
-    number_of_cycles = (operational_time * 3600) / avg_cycle_time_seconds
-   
-   
-    print(f'Average Cycle Time: {avg_cycle_time_minutes}')
-    print(f'Number of cycles: {avg_cycle_time_seconds}')
-    print(f'Operational time: {format_time(operational_time)}')
-    print(f'Downtime: {format_time(downtime)}')
+    operational_time = min(operational_time, total_hours)
+    downtime = max(downtime, 0)
 
+    formatted_operational_time = format_time(operational_time)
+    formatted_downtime = format_time(downtime)
 
     line_fig = go.Figure()
     line_fig.add_trace(go.Scatter(
@@ -230,7 +223,8 @@ def process_and_plot_data(df_cycle):
 def update_output(n_clicks, selected_date):
     if n_clicks > 0:
         df_cycle = parse_frappe_api(selected_date)
-        df_cycle = df_cycle.drop_duplicates()  
+        print(df_cycle)
+
         if isinstance(df_cycle, str): 
             return html.Div([html.P(df_cycle)])
 
